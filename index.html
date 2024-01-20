@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket File Upload</title>
+</head>
+
+<body>
+    <input type="file" id="fileInput">
+    <button onclick="startUpload()">Upload</button>
+    <div id="progress">
+
+    </div>
+
+    <script>
+        async function startUpload() {
+            document.getElementById('progress').innerText = `Connecting`;
+
+            const socket = await new WebSocket('ws://localhost:3000');
+            let file;
+            socket.addEventListener("error", (event) => {
+                console.log("WebSocket error: ", event);
+                document.getElementById('progress').innerText = `Connect Failed`;
+            });
+
+
+            socket.addEventListener('message', (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.type === 'start') {
+                        console.log('File upload started');
+                    } else if (data.type === 'progress') {
+                        document.getElementById('progress').innerText = `Upload Progress: ${data.percent}%`;
+
+                        console.log(data.percent)
+
+                        if (data.percent === "100.00")
+                            socket.close()
+                    }
+                } catch (error) {
+                    console.error('Error parsing JSON:', error);
+                }
+            });
+
+            socket.addEventListener('open', () => {
+                console.log('WebSocket connection established');
+                document.getElementById('progress').innerText = `Upload Progress: ${0}%`;
+
+                const fileInput = document.getElementById('fileInput');
+                file = fileInput.files[0];
+
+                if (file) {
+                    const data = {
+                        type: 'start',
+                        fileName: file.name,
+                        fileSize: file.size,
+                    };
+
+                    socket.send(JSON.stringify(data));
+
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const chunkSize = 1024 * 1024; // 1MB chunks
+                        const arrayBuffer = e.target.result;
+                        for (let offset = 0; offset < arrayBuffer.byteLength; offset += chunkSize) {
+                            const chunk = arrayBuffer.slice(offset, offset + chunkSize);
+                            socket.send(chunk);
+                        }
+                    };
+                    reader.onloadend = () => {
+                        console.log("update end")
+                    }
+
+                    reader.readAsArrayBuffer(file);
+                } else {
+                    console.error('No file selected');
+                }
+            });
+        }
+    </script>
+</body>
+
+</html>
